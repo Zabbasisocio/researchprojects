@@ -2,6 +2,8 @@ import nltk
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize, sent_tokenize
 from gensim.summarization.summarizer import summarize
+from gensim import corpora
+from gensim.models.ldamodel import LdaModel
 
 # Download required NLTK resources
 nltk.download('punkt')
@@ -15,27 +17,28 @@ with open(file_path, "r", encoding="utf-8") as file:
 # Tokenize and remove stopwords
 stop_words = set(stopwords.words('english'))
 word_tokens = word_tokenize(conversation)
-filtered_words = [w for w in word_tokens if w.lower() not in stop_words]
+filtered_words = [w for w in word_tokens if w.lower() not in stop_words and len(w) > 3]
 
-# Identify topic by frequency distribution
-freq_dist = nltk.FreqDist(filtered_words)
-common_words = freq_dist.most_common(3)
-topic = common_words[0][0]  # Taking the most common word as the topic
+# Split the conversation into sentences
+sentences = sent_tokenize(conversation)
+tokenized_sentences = [word_tokenize(sent) for sent in sentences]
 
-# Split the conversation into chunks of approximately 400 words each
-chunks = [' '.join(word_tokens[i:i+400]) for i in range(0, len(word_tokens), 400)]
+# Create a dictionary and corpus for LDA
+dictionary = corpora.Dictionary(tokenized_sentences)
+corpus = [dictionary.doc2bow(text) for text in tokenized_sentences]
 
-# Summarize each chunk using gensim and concatenate the results
-summaries = []
-for chunk in chunks:
-    chunk_summary = summarize(chunk, word_count=200)
-    summaries.append(chunk_summary)
+# Train the LDA model
+lda = LdaModel(corpus, num_topics=3, id2word=dictionary, passes=15)
+topics = lda.print_topics(num_words=5)
 
-final_summary = ' '.join(summaries)
+# Extract the topic
+topic = ' '.join(word for word in topics[0][1].split('"')[1::2])
+
+# Summarize the conversation
+summary = summarize(conversation, word_count=100)
 
 # Identify action items and dates
 action_items = {}
-sentences = sent_tokenize(conversation)
 for sentence in sentences:
     if "will be responsible for" in sentence:
         parts = sentence.split(" will be responsible for ")
@@ -47,5 +50,5 @@ for sentence in sentences:
             action_items["Deadline"] = parts[1]
 
 print(f"Topic: {topic}")
-print(f"Summary: {final_summary}")
+print(f"Summary: {summary}")
 print(f"Action Items: {action_items}")
